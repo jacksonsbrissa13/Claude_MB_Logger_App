@@ -12,8 +12,8 @@ function todayFormatted() {
 
 function buildSystemPrompt(bookieList) {
   const bookieListStr = bookieList.length
-    ? `The canonical bookie list (use exact spelling from this list when matching): ${bookieList.join(', ')}`
-    : 'No bookie list available — use best judgement for bookie names.'
+    ? `BOOKIE LIST — you must only use names from this list for the bookie and layBookie fields. Never invent or guess a name not on this list. If you hear a casual name, match it to the closest entry on this list: ${bookieList.join(', ')}`
+    : 'No bookie list available — use your best judgement to match casual bookie names to likely canonical names.'
 
   return `You are a matched betting data parser. Parse spoken bet transcripts into structured JSON.
 
@@ -43,36 +43,42 @@ Each bet object must have exactly these fields:
 
 ### Defaults
 - date: today's date unless specified
-- activity: "Promo" unless user says otherwise (e.g. "system", "deposit", "withdrawal", "SNR", "bonus")
+- activity: "Promo" unless the user's words clearly match another allowed value (see Activity values below). If unclear, always default to "Promo". Never use a value not in the allowed list.
 - layBookie: only populate if the user explicitly says "lay" in the transcript. If no lay is mentioned, set layBookie, layStake, layOdds, and layComm all to "".
 - layComm: 0.05 if layBookie is "Betfair", 0 if layBookie is any other bookie, "" if no lay mentioned
-- isSystem: false unless user explicitly says "system"
-- sport: infer from context — horse/greyhound/track names or "racing" → "Racing"; team sports, leagues, player names → "Sport"; if unclear default to "Racing"
+- isSystem: ALWAYS false unless the user explicitly says the word "system". Never infer or assume isSystem from context.
+- sport: must be exactly "Sport" or "Racing". Infer from context — horse/greyhound/track names or the word "racing" → "Racing"; team sports, leagues, player names → "Sport". If unclear, default to "Sport".
+- bookie / layBookie: must exactly match a name from the BOOKIE LIST above. Never invent a bookie name. If the user says something casual (e.g. "sports", "laddy", "bf"), map it to the closest match in the list.
 - notes: auto-populate with any event context found in the transcript. This includes team names, player names, race numbers, venue/track names, prop bet descriptions, or any other detail that identifies the event. Examples: "DeAndre Ayton double double", "Race 7 Flemington", "Storm vs Roosters", "first try scorer", "Man City -1.5". The user does NOT need to say "notes" — extract this automatically from whatever describes the event. Leave as "" only if no event context is present.
 
 ### Activity values
-- "Promo" (default)
-- "System" (only if user says "system")
-- "SNR" / "Bonus" / "Freebet" — use as spoken
-- "Deposit" / "Withdrawal" — see deposits section below
+The activity field must be EXACTLY one of these six values — no other values are permitted:
+- "Promo" — default when nothing else applies
+- "BONUS" — when user says "bonus" or "bonus bet"
+- "Non-Promo" — when user says "non promo", "non-promo", or "regular"
+- "Deposit" — when user says "deposit" (see deposits section below)
+- "Bonus Credit" — when user says "bonus credit"
+- "Withdrawal" — when user says "withdrawal" or "withdraw" (see deposits section below)
+If the user says "system", set isSystem=true but keep activity as "Promo" (or whatever other activity applies) — "system" is NOT an activity value.
 
 ### Bookie name normalisation
-Match casual names to canonical names. Examples:
-- "sports", "sportsbet", "sb" → "Sportsbet"
-- "sports VP", "SB VP", "sportsbet VP" → "Sportsbet VP"
-- "sports MS", "SB MS" → "Sportsbet MS"
-- "sports MSZ", "SB MSZ" → "Sportsbet MSZ"
-- "laddy", "lads", "ladbrokes" → "Ladbrokes"
-- "tab" → "TAB"
-- "neds" → "Neds"
-- "betfair", "bf" → "Betfair"
-- "pointsbet", "pb" → "Pointsbet"
-- "unibet" → "Unibet"
-- "bluebet" → "BlueBet"
-- "betr" → "Betr"
-- "topsport" → "TopSport"
-- "palmerbet" → "Palmerbet"
-If the bookie list is provided, always prefer an exact match from the list.
+The bookie and layBookie fields must only contain names from the BOOKIE LIST. Never output a bookie name that is not on the list.
+Map casual spoken names to the closest match on the list using these hints:
+- "sports", "sportsbet", "sb" → match the "Sportsbet" entry
+- "sports VP", "SB VP" → match the "Sportsbet VP" entry
+- "sports MS", "SB MS" → match the "Sportsbet MS" entry
+- "sports MSZ", "SB MSZ" → match the "Sportsbet MSZ" entry
+- "laddy", "lads", "ladbrokes" → match the "Ladbrokes" entry
+- "tab" → match the "TAB" entry
+- "neds" → match the "Neds" entry
+- "betfair", "bf", "the exchange" → match the "Betfair" entry
+- "pointsbet", "pb" → match the "Pointsbet" entry
+- "unibet" → match the "Unibet" entry
+- "bluebet" → match the "BlueBet" entry
+- "betr" → match the "Betr" entry
+- "topsport" → match the "TopSport" entry
+- "palmerbet" → match the "Palmerbet" entry
+If a spoken name has no reasonable match on the list, use the closest phonetic or partial match from the list rather than inventing a new name.
 
 ### "All 4 Sportsbets" expansion
 If the user says "all 4 sportsbets" or "all four sportsbets", generate 4 separate bet objects with bookie = "Sportsbet", "Sportsbet VP", "Sportsbet MS", "Sportsbet MSZ" — all other fields identical.
