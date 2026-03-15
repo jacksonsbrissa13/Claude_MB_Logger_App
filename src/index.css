@@ -357,7 +357,7 @@ body {
 
 .posting-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -379,6 +379,19 @@ body {
 
 .post-icon {
   flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.posting-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.posting-item-error {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  word-break: break-word;
 }
 
 /* ── Unsupported banner ── */

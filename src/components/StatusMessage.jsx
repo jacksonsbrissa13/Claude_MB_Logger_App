@@ -13,8 +13,8 @@ export function StatusMessage({ type, message }) {
 }
 
 /**
- * PostingProgress — shows per-bet posting status while in-flight.
- * @param {{ bookie: string, done: boolean, ok: boolean|null }[]} items
+ * PostingProgress — shows per-bet posting status, in-flight or final.
+ * @param {{ bookie: string, done: boolean, ok: boolean|null, error?: string }[]} items
  */
 export function PostingProgress({ items }) {
   return (
@@ -27,7 +27,12 @@ export function PostingProgress({ items }) {
           <span className="post-icon">
             {!item.done ? <SmallSpinner /> : item.ok ? '✓' : '✗'}
           </span>
-          <span>{item.bookie}</span>
+          <span className="posting-item-body">
+            <span>{item.bookie}</span>
+            {item.done && !item.ok && item.error && (
+              <span className="posting-item-error">{item.error}</span>
+            )}
+          </span>
         </div>
       ))}
     </div>

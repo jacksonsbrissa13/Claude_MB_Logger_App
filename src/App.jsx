@@ -39,16 +39,21 @@ export default function App() {
     fetchBookies().then(setBookieList)
   }, [])
 
-  // Auto-clear result state after 3s
+  const [anyFailed, setAnyFailed] = useState(false)
+
+  // Auto-clear result state: 3s on full success, 8s when any bet failed
+  // (longer delay gives the user time to note which rows need manual entry)
   useEffect(() => {
     if (appState === 'result') {
       const t = setTimeout(() => {
         setAppState('idle')
         setStatusMsg(null)
-      }, 3000)
+        setPostingItems([])
+        setAnyFailed(false)
+      }, anyFailed ? 8000 : 3000)
       return () => clearTimeout(t)
     }
-  }, [appState])
+  }, [appState, anyFailed])
 
   const handleFinalTranscript = useCallback(async (transcript) => {
     if (!transcript.trim()) {
@@ -104,11 +109,19 @@ export default function App() {
 
     const results = await postBets(bets)
 
-    // Update posting items as results come in
-    setPostingItems(results.map(r => ({ bookie: r.bookie, done: true, ok: r.ok })))
+    // Carry error text through so the result screen can display it per row
+    setPostingItems(results.map(r => ({
+      bookie: r.bookie,
+      done: true,
+      ok: r.ok,
+      error: r.error ?? null,
+    })))
 
     const allOk = results.every(r => r.ok)
     const failed = results.filter(r => !r.ok)
+    const succeeded = results.filter(r => r.ok)
+
+    setAnyFailed(!allOk)
 
     if (allOk) {
       saveLastBet(bets)
@@ -116,12 +129,18 @@ export default function App() {
         type: 'success',
         message: bets.length === 1
           ? `Logged: ${bets[0].bookie}`
-          : `${bets.length} bets logged successfully`,
+          : `All ${bets.length} bets logged`,
       })
-    } else {
+    } else if (succeeded.length === 0) {
       setStatusMsg({
         type: 'error',
-        message: `Failed: ${failed.map(f => f.bookie).join(', ')}`,
+        message: 'All bets failed — add rows manually',
+      })
+    } else {
+      saveLastBet(bets)
+      setStatusMsg({
+        type: 'error',
+        message: `${succeeded.length}/${bets.length} logged — add ${failed.map(f => f.bookie).join(', ')} manually`,
       })
     }
     setAppState('result')
@@ -199,7 +218,9 @@ export default function App() {
           />
         )}
 
-        {showPosting && (
+        {/* Show progress list while posting, and keep it visible on the result
+            screen so the user can see exactly which rows succeeded or failed */}
+        {(showPosting || showResult) && postingItems.length > 0 && (
           <PostingProgress items={postingItems} />
         )}
 
