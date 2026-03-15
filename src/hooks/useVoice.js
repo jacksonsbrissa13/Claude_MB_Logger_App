@@ -4,8 +4,6 @@ import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognitio
 export function useVoice({ onFinalTranscript }) {
   const {
     transcript,
-    interimTranscript,
-    finalTranscript,
     listening,
     resetTranscript,
     browserSupportsSpeechRecognition,
@@ -14,18 +12,20 @@ export function useVoice({ onFinalTranscript }) {
   const onFinalRef = useRef(onFinalTranscript)
   onFinalRef.current = onFinalTranscript
 
-  // Fire callback when recognition stops and we have a final transcript
+  // Fire callback when the user manually stops recording.
+  // Use `transcript` (full cumulative text) — with continuous mode, finalTranscript
+  // only holds the most recent segment and resets on each silence gap.
   const prevListening = useRef(false)
   useEffect(() => {
-    if (prevListening.current && !listening && finalTranscript) {
-      onFinalRef.current(finalTranscript)
+    if (prevListening.current && !listening && transcript) {
+      onFinalRef.current(transcript)
     }
     prevListening.current = listening
-  }, [listening, finalTranscript])
+  }, [listening, transcript])
 
   const start = useCallback(() => {
     resetTranscript()
-    SpeechRecognition.startListening({ continuous: false, language: 'en-AU' })
+    SpeechRecognition.startListening({ continuous: true, language: 'en-AU' })
   }, [resetTranscript])
 
   const stop = useCallback(() => {
@@ -36,13 +36,8 @@ export function useVoice({ onFinalTranscript }) {
     resetTranscript()
   }, [resetTranscript])
 
-  // Display transcript: show interim while listening, final when done
-  const displayTranscript = listening
-    ? transcript || interimTranscript
-    : finalTranscript || transcript
-
   return {
-    transcript: displayTranscript,
+    transcript,
     listening,
     start,
     stop,

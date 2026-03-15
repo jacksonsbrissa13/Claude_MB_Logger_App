@@ -1,5 +1,5 @@
 const GAS_URL =
-  'https://script.google.com/macros/s/AKfycbwg7h1kCcBs9xt1NV5GuoLOvZygDLeSB9EbWfmJXum29FL2W65r8wBdAmGmwxhV4BNX/exec'
+  'https://script.google.com/macros/s/AKfycbycKZyzdNYpbi6DZVkHFZbPGA13F2B8A2w08n6zkr2Oo0u19vLNdlfX5UYBjxqiiWpI/exec'
 
 /**
  * Fetch the bookie list from column D of the "list/help" sheet tab.
