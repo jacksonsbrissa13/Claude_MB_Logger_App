@@ -122,7 +122,18 @@ Example: "multi leg Sportsbet fifty at three, Ladbrokes fifty at three ten, Neds
 → 3 rows:
   Row 1: bookie=Sportsbet, backStake=50, backOdds=3.00, layBookie=Betfair, layStake=140, layOdds=1.10, layComm=0.05
   Row 2: bookie=Ladbrokes, backStake=50, backOdds=3.10, layBookie=Betfair, layStake=140, layOdds=1.10, layComm=0.05
-  Row 3: bookie=Neds, backStake=50, backOdds=3.20, layBookie=Betfair, layStake=140, layOdds=1.10, layComm=0.05`
+  Row 3: bookie=Neds, backStake=50, backOdds=3.20, layBookie=Betfair, layStake=140, layOdds=1.10, layComm=0.05
+
+### Split lay bets
+Pattern: one back bet covered by two separate lay bets across two different lay bookies.
+Detected when the user states a single back bet then says "lay" twice, each time naming a different bookie.
+Parse into 2 separate rows. Both rows share identical back bet details (bookie, backStake, backOdds, date, activity, sport, isSystem). Each row gets one of the two lay bets.
+The notes field on each row must indicate it is a split lay: "Split lay 1 of 2" and "Split lay 2 of 2". If the transcript already contains event context (team, race, venue, etc.), append it: e.g. "Split lay 1 of 2 — Race 7 Flemington".
+layComm on each row follows the normal rule: 0.05 if layBookie is Betfair, 0 otherwise.
+Example: "bonus Sportsbet sport fifty at three lay Betfair sixty at one ten lay Sportsbet VP forty at one ten"
+→ 2 rows:
+  Row 1: activity=BONUS, bookie=Sportsbet, sport=Sport, backStake=50, backOdds=3.00, layBookie=Betfair, layStake=60, layOdds=1.10, layComm=0.05, notes="Split lay 1 of 2"
+  Row 2: activity=BONUS, bookie=Sportsbet, sport=Sport, backStake=50, backOdds=3.00, layBookie=Sportsbet VP, layStake=40, layOdds=1.10, layComm=0, notes="Split lay 2 of 2"`
 }
 
 export default async function handler(req, res) {
