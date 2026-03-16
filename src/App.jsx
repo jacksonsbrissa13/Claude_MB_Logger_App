@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { MicButton } from './components/MicButton'
 import { BetPreview } from './components/BetPreview'
 import { StatusMessage, PostingProgress } from './components/StatusMessage'
+import { StatsPanel } from './components/StatsPanel'
+import { Marquee } from './components/Marquee'
 import { useVoice } from './hooks/useVoice'
 import { parseWithClaude } from './lib/parseWithClaude'
 import { postBets } from './lib/postBet'
 import { fetchBookies } from './lib/fetchBookies'
+import { undoLast } from './lib/undoLast'
 
 // States: idle | listening | parsing | preview | posting | result
 const LAST_BET_KEY = 'mbVoiceLogger_lastBet'
@@ -21,28 +24,45 @@ function loadLastBet() {
 
 function saveLastBet(bets) {
   try {
-    // Save first bet as the reference for "same as last"
     localStorage.setItem(LAST_BET_KEY, JSON.stringify(bets[0]))
   } catch {}
 }
 
+function formatClock(d) {
+  return d.toLocaleTimeString('en-AU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
 export default function App() {
-  const [appState, setAppState] = useState('idle')
-  const [bets, setBets] = useState([])
+  const [appState, setAppState]         = useState('idle')
+  const [bets, setBets]                 = useState([])
   const [postingItems, setPostingItems] = useState([])
-  const [statusMsg, setStatusMsg] = useState(null) // { type, message }
-  const [bookieList, setBookieList] = useState([])
+  const [statusMsg, setStatusMsg]       = useState(null) // { type, message }
+  const [bookieList, setBookieList]     = useState([])
+  const [anyFailed, setAnyFailed]       = useState(false)
+  const [clock, setClock]               = useState(() => formatClock(new Date()))
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [marqueeIndex, setMarqueeIndex] = useState(0)
+  const [undoStatus, setUndoStatus]     = useState(null) // { type, message } | null
+
   const lastBet = loadLastBet()
+
+  // Live clock
+  useEffect(() => {
+    const t = setInterval(() => setClock(formatClock(new Date())), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   // Fetch bookie list on mount
   useEffect(() => {
     fetchBookies().then(setBookieList)
   }, [])
 
-  const [anyFailed, setAnyFailed] = useState(false)
-
   // Auto-clear result state: 3s on full success, 8s when any bet failed
-  // (longer delay gives the user time to note which rows need manual entry)
   useEffect(() => {
     if (appState === 'result') {
       const t = setTimeout(() => {
@@ -55,6 +75,14 @@ export default function App() {
     }
   }, [appState, anyFailed])
 
+  // Auto-clear undo status after 4s
+  useEffect(() => {
+    if (undoStatus) {
+      const t = setTimeout(() => setUndoStatus(null), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [undoStatus])
+
   const handleFinalTranscript = useCallback(async (transcript) => {
     if (!transcript.trim()) {
       setAppState('idle')
@@ -63,9 +91,8 @@ export default function App() {
 
     setAppState('parsing')
 
-    // Determine if this is a "same as last" variation
     const isSameVariation = /\bsame\b/i.test(transcript)
-    const prevBet = isSameVariation ? lastBet : null
+    const prevBet = isSameVariation ? loadLastBet() : null
 
     try {
       const parsed = await parseWithClaude(transcript, bookieList, prevBet)
@@ -80,13 +107,13 @@ export default function App() {
       setStatusMsg({ type: 'error', message: `Parse error: ${err?.message ?? 'Unknown'}` })
       setAppState('result')
     }
-  }, [bookieList, lastBet])
+  }, [bookieList])
 
   const { transcript, listening, start, stop, reset, supported } = useVoice({
     onFinalTranscript: handleFinalTranscript,
   })
 
-  function handleMicToggle() {
+  const handleMicToggle = useCallback(() => {
     if (listening) {
       stop()
     } else {
@@ -94,7 +121,21 @@ export default function App() {
       setAppState('listening')
       start()
     }
-  }
+  }, [listening, reset, start, stop])
+
+  // Spacebar shortcut — start/stop recording
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = document.activeElement?.tagName
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return
+      if (!['idle', 'listening'].includes(appState)) return
+      e.preventDefault()
+      handleMicToggle()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [appState, handleMicToggle])
 
   function handleBetChange(idx, field, value) {
     setBets(prev => prev.map((bet, i) =>
@@ -109,7 +150,6 @@ export default function App() {
 
     const results = await postBets(bets)
 
-    // Carry error text through so the result screen can display it per row
     setPostingItems(results.map(r => ({
       bookie: r.bookie,
       done: true,
@@ -117,8 +157,8 @@ export default function App() {
       error: r.error ?? null,
     })))
 
-    const allOk = results.every(r => r.ok)
-    const failed = results.filter(r => !r.ok)
+    const allOk     = results.every(r => r.ok)
+    const failed    = results.filter(r => !r.ok)
     const succeeded = results.filter(r => r.ok)
 
     setAnyFailed(!allOk)
@@ -132,10 +172,7 @@ export default function App() {
           : `All ${bets.length} bets logged`,
       })
     } else if (succeeded.length === 0) {
-      setStatusMsg({
-        type: 'error',
-        message: 'All bets failed — add rows manually',
-      })
+      setStatusMsg({ type: 'error', message: 'All bets failed — add rows manually' })
     } else {
       saveLastBet(bets)
       setStatusMsg({
@@ -143,6 +180,12 @@ export default function App() {
         message: `${succeeded.length}/${bets.length} logged — add ${failed.map(f => f.bookie).join(', ')} manually`,
       })
     }
+
+    if (allOk || succeeded.length > 0) {
+      setRefreshTrigger(n => n + 1)
+      setMarqueeIndex(n => n + 1)
+    }
+
     setAppState('result')
   }
 
@@ -158,38 +201,56 @@ export default function App() {
     setAppState('preview')
   }
 
-  const isBusy = ['parsing', 'posting'].includes(appState)
-  const showMic = ['idle', 'listening'].includes(appState)
+  async function handleUndo() {
+    const result = await undoLast()
+    if (result.ok) {
+      localStorage.removeItem(LAST_BET_KEY)
+      setUndoStatus({ type: 'success', message: result.message ?? 'Last bet removed' })
+      setRefreshTrigger(n => n + 1)
+    } else {
+      setUndoStatus({ type: 'error', message: result.error ?? 'Undo failed' })
+    }
+  }
+
+  const isBusy       = ['parsing', 'posting'].includes(appState)
+  const showMic      = ['idle', 'listening'].includes(appState)
   const showTranscript = appState === 'listening' || (transcript && appState !== 'idle')
-  const showParsing = appState === 'parsing'
-  const showPreview = appState === 'preview'
-  const showPosting = appState === 'posting'
-  const showResult = appState === 'result'
+  const showParsing  = appState === 'parsing'
+  const showPreview  = appState === 'preview'
+  const showPosting  = appState === 'posting'
+  const showResult   = appState === 'result'
 
   return (
     <div className="app">
-      <header className="app-header">
-        <span className="app-title">MB Voice Logger</span>
-        {bookieList.length > 0 && (
-          <span style={{ fontSize: '0.75rem', color: '#555' }}>
-            {bookieList.length} bookies loaded
-          </span>
-        )}
+      {/* ── Top bar ─────────────────────────────────────────────────── */}
+      <header className="app-topbar">
+        <span className="app-title">MB VOICE LOGGER</span>
+        <div className="topbar-right">
+          {bookieList.length > 0 && (
+            <span className="topbar-bookies">{bookieList.length} BOOKIES</span>
+          )}
+          <span className="topbar-clock">{clock}</span>
+        </div>
       </header>
 
-      {!supported && (
-        <div className="unsupported-banner">
-          Voice not supported in this browser. Use Chrome for full functionality.
-        </div>
-      )}
+      {/* ── Left panel — mic input ───────────────────────────────────── */}
+      <main className="app-left">
+        {!supported && (
+          <div className="unsupported-banner">
+            Voice not supported in this browser. Use Chrome for full functionality.
+          </div>
+        )}
 
-      <main className="app-body">
         {showMic && (
           <MicButton
             listening={listening}
             onToggle={handleMicToggle}
             disabled={!supported || isBusy}
           />
+        )}
+
+        {showMic && (
+          <p className="spacebar-hint">PRESS SPACE TO {listening ? 'STOP' : 'START'}</p>
         )}
 
         {showTranscript && (
@@ -218,8 +279,6 @@ export default function App() {
           />
         )}
 
-        {/* Show progress list while posting, and keep it visible on the result
-            screen so the user can see exactly which rows succeeded or failed */}
         {(showPosting || showResult) && postingItems.length > 0 && (
           <PostingProgress items={postingItems} />
         )}
@@ -233,7 +292,25 @@ export default function App() {
             Same as last: {lastBet.bookie}
           </button>
         )}
+
+        {showMic && !listening && lastBet && (
+          <button className="btn-undo" onClick={handleUndo}>
+            ↩ Undo last bet
+          </button>
+        )}
+
+        {undoStatus && (
+          <StatusMessage type={undoStatus.type} message={undoStatus.message} />
+        )}
       </main>
+
+      {/* ── Right panel — stats ──────────────────────────────────────── */}
+      <aside className="app-right">
+        <StatsPanel refreshTrigger={refreshTrigger} />
+      </aside>
+
+      {/* ── Bottom marquee ───────────────────────────────────────────── */}
+      <Marquee messageIndex={marqueeIndex} />
     </div>
   )
 }
