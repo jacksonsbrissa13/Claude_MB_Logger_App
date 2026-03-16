@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const MESSAGES = [
   "JACKSON... MORE LIKE A FUCKING MONEY PRINTER 🖨️",
   "KEEP DOMINATING KING 👑",
@@ -12,22 +14,26 @@ const MESSAGES = [
 
 /**
  * LED-style scrolling marquee ticker.
- * @param {{ messageIndex: number }} props
- *   messageIndex — incremented by App on each confirmed bet; selects the
- *   current message. Animation does NOT restart on change — the new text
- *   appears on the next natural loop cycle for a seamless scroll.
+ * Each message scrolls from right edge to off-screen left, then the next
+ * message starts immediately. Cycles through all messages in order.
+ * @param {{ messageIndex: number }} props  (unused for cycling; kept for API compat)
  */
-export function Marquee({ messageIndex = 0 }) {
-  const text = MESSAGES[messageIndex % MESSAGES.length]
+export function Marquee() {
+  const [currentIdx, setCurrentIdx] = useState(0)
+
+  function handleAnimationEnd() {
+    setCurrentIdx(i => (i + 1) % MESSAGES.length)
+  }
 
   return (
     <div className="app-marquee" aria-hidden="true">
-      <div className="marquee-track">
-        <span className="marquee-text">{text}</span>
-        <span className="marquee-sep">///</span>
-        <span className="marquee-text">{text}</span>
-        <span className="marquee-sep">///</span>
-      </div>
+      <span
+        key={currentIdx}
+        className="marquee-text"
+        onAnimationEnd={handleAnimationEnd}
+      >
+        {MESSAGES[currentIdx]}
+      </span>
     </div>
   )
 }

@@ -13,12 +13,6 @@ import { fetchStats } from '../lib/fetchStats'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
 
-const PERIODS = [
-  { key: 'today', label: 'Today' },
-  { key: 'week',  label: 'This Week' },
-  { key: 'month', label: 'This Month' },
-]
-
 const CHART_FONT = { family: "'JetBrains Mono', ui-monospace, monospace", size: 10 }
 
 const baseChartOptions = {
@@ -62,36 +56,26 @@ const ACTIVITY_COLOURS = [
 function StatCard({ label, value }) {
   return (
     <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value ?? '—'}</div>
+      <div className="stat-card-label">{label}</div>
+      <div className={`stat-card-value${value == null ? ' dim' : ''}`}>
+        {value ?? '—'}
+      </div>
     </div>
   )
 }
 
 export function StatsPanel({ refreshTrigger = 0 }) {
-  const [activePeriod, setActivePeriod] = useState('today')
-  const [stats, setStats]               = useState(null)
-  const [loading, setLoading]           = useState(true)
-  const [monthStats, setMonthStats]     = useState(null)
+  const [stats, setStats]   = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  // Fetch period stats whenever period or refreshTrigger changes
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchStats(activePeriod).then(data => {
+    fetchStats('today').then(data => {
       if (!cancelled) {
         setStats(data)
         setLoading(false)
       }
-    })
-    return () => { cancelled = true }
-  }, [activePeriod, refreshTrigger])
-
-  // Top bookies always reads month data
-  useEffect(() => {
-    let cancelled = false
-    fetchStats('month').then(data => {
-      if (!cancelled) setMonthStats(data)
     })
     return () => { cancelled = true }
   }, [refreshTrigger])
@@ -123,11 +107,11 @@ export function StatsPanel({ refreshTrigger = 0 }) {
       }
     : null
 
-  const topBookiesData = monthStats?.topBookies?.length
+  const topBookiesData = stats?.topBookies?.length
     ? {
-        labels: monthStats.topBookies.map(d => d.label),
+        labels: stats.topBookies.map(d => d.label),
         datasets: [{
-          data: monthStats.topBookies.map(d => d.stake),
+          data: stats.topBookies.map(d => d.stake),
           backgroundColor: 'rgba(245,158,11,0.25)',
           borderColor: '#f59e0b',
           borderWidth: 1,
@@ -136,90 +120,74 @@ export function StatsPanel({ refreshTrigger = 0 }) {
       }
     : null
 
-  // ── Stat card values ──────────────────────────────────────────────────────
-
   const sportRacing = stats
     ? `${stats.sportCount}S / ${stats.racingCount}R`
     : null
 
   return (
     <section className="stats-panel">
-      {/* Period tabs */}
-      <div className="stats-tabs">
-        {PERIODS.map(p => (
-          <button
-            key={p.key}
-            className={`stats-tab${activePeriod === p.key ? ' active' : ''}`}
-            onClick={() => setActivePeriod(p.key)}
-          >
-            {p.label}
-          </button>
-        ))}
-        {loading && <span className="stats-loading">●</span>}
+      {/* Header row */}
+      <div className="stats-header">
+        <span className="stats-period-label">TODAY</span>
+        {loading && <span className="stats-spinner">●</span>}
       </div>
 
-      {/* Error / unavailable notice */}
-      {!loading && !stats && (
-        <p className="stats-error">STATS UNAVAILABLE — CONFIGURE GAS ENDPOINT</p>
-      )}
+      {/* Scrollable body */}
+      <div className="stats-body">
+        {!loading && !stats && (
+          <p className="stats-error">STATS UNAVAILABLE — CONFIGURE GAS ENDPOINT</p>
+        )}
 
-      {/* Stat cards */}
-      <div className="stat-cards">
-        <StatCard label="Total Bets"    value={stats?.totalBets} />
-        <StatCard label="Promo Stake"   value={stats ? `$${stats.promoStake}` : null} />
-        <StatCard label="Bonus Stake"   value={stats ? `$${stats.bonusStake}` : null} />
-        <StatCard label="Non-Promo"     value={stats ? `$${stats.nonPromoStake}` : null} />
-        <StatCard label="Sport / Racing" value={sportRacing} />
-      </div>
-
-      {/* Charts */}
-      <div className="chart-section">
-        <div className="chart-label">BETS / DAY (LAST 7)</div>
-        <div className="chart-wrap">
-          {betsPerDayData
-            ? <Bar
-                data={betsPerDayData}
-                options={{ ...baseChartOptions, scales: barScales }}
-              />
-            : <div className="chart-empty">—</div>
-          }
+        <div className="stat-cards">
+          <StatCard label="Total Bets"     value={stats?.totalBets} />
+          <StatCard label="Promo Stake"    value={stats ? `$${stats.promoStake}` : null} />
+          <StatCard label="Bonus Stake"    value={stats ? `$${stats.bonusStake}` : null} />
+          <StatCard label="Non-Promo"      value={stats ? `$${stats.nonPromoStake}` : null} />
+          <StatCard label="Sport / Racing" value={sportRacing} />
         </div>
-      </div>
 
-      <div className="chart-section">
-        <div className="chart-label">ACTIVITY SPLIT</div>
-        <div className="chart-wrap">
-          {activityData
-            ? <Doughnut
-                data={activityData}
-                options={{
-                  ...baseChartOptions,
-                  cutout: '65%',
-                  plugins: {
-                    ...baseChartOptions.plugins,
-                    legend: {
-                      display: true,
-                      position: 'right',
-                      labels: { color: '#4a5568', font: CHART_FONT, boxWidth: 10, padding: 8 },
+        <div className="chart-section">
+          <div className="chart-section-label">BETS / DAY (LAST 7)</div>
+          <div className="chart-wrap">
+            {betsPerDayData
+              ? <Bar data={betsPerDayData} options={{ ...baseChartOptions, scales: barScales }} />
+              : <div className="chart-empty">—</div>
+            }
+          </div>
+        </div>
+
+        <div className="chart-section">
+          <div className="chart-section-label">ACTIVITY SPLIT</div>
+          <div className="chart-wrap">
+            {activityData
+              ? <Doughnut
+                  data={activityData}
+                  options={{
+                    ...baseChartOptions,
+                    cutout: '65%',
+                    plugins: {
+                      ...baseChartOptions.plugins,
+                      legend: {
+                        display: true,
+                        position: 'right',
+                        labels: { color: '#4a5568', font: CHART_FONT, boxWidth: 10, padding: 8 },
+                      },
                     },
-                  },
-                }}
-              />
-            : <div className="chart-empty">—</div>
-          }
+                  }}
+                />
+              : <div className="chart-empty">—</div>
+            }
+          </div>
         </div>
-      </div>
 
-      <div className="chart-section">
-        <div className="chart-label">TOP BOOKIES — MONTH STAKE</div>
-        <div className="chart-wrap">
-          {topBookiesData
-            ? <Bar
-                data={topBookiesData}
-                options={{ ...baseChartOptions, scales: barScales }}
-              />
-            : <div className="chart-empty">—</div>
-          }
+        <div className="chart-section">
+          <div className="chart-section-label">TOP BOOKIES — TODAY'S STAKE</div>
+          <div className="chart-wrap">
+            {topBookiesData
+              ? <Bar data={topBookiesData} options={{ ...baseChartOptions, scales: barScales }} />
+              : <div className="chart-empty">—</div>
+            }
+          </div>
         </div>
       </div>
     </section>
